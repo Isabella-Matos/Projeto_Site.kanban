@@ -1,0 +1,127 @@
+<!-- Página independente e acessível para detalhes, edição, checklist e comentários de uma tarefa. -->
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title id="taskPageTitle">Tarefa | Trilha</title>
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="task-page">
+  <!-- Cabeçalho mantém o contexto do quadro e oferece retorno direto ao Kanban. -->
+  <header class="task-page-header">
+    <div>
+      <a class="btn-ghost task-back" id="backToBoard" href="index.html">← Voltar ao quadro</a>
+      <p class="brand task-brand"><span class="brand-icon" aria-hidden="true"></span>Trilha</p>
+    </div>
+    <div class="header-actions">
+      <span class="user" id="taskUserName"></span>
+      <span class="readonly-badge" id="taskReadonlyBadge" hidden>Somente leitura</span>
+      <button class="btn-ghost" id="taskLogout" type="button" hidden>Sair</button>
+    </div>
+  </header>
+
+  <!-- A região de estado comunica carregamento, ausência de acesso e erros de leitura. -->
+  <main class="task-layout">
+    <p class="task-state" id="taskState" role="status" aria-live="polite">Carregando tarefa...</p>
+    <section class="task-panel" id="taskPanel" aria-labelledby="taskHeading" hidden>
+      <h1 class="task-heading" id="taskHeading">Detalhes da tarefa</h1>
+      <form id="taskForm">
+        <div class="task-title-row">
+          <div class="task-title-field">
+            <label for="taskTitle">Título</label>
+            <input id="taskTitle" maxlength="80" required>
+          </div>
+          <span class="priority-badge" id="taskPriorityBadge" hidden></span>
+        </div>
+
+        <label for="taskDescription">Descrição</label>
+        <textarea id="taskDescription" maxlength="4000" rows="5"></textarea>
+
+        <div class="task-fields-grid">
+          <div>
+            <label for="taskStatus">Status</label>
+            <select id="taskStatus">
+              <option value="todo">A Fazer</option>
+              <option value="doing">Em Andamento</option>
+              <option value="done">Concluído</option>
+            </select>
+          </div>
+          <div>
+            <label for="taskAssignee">Responsável</label>
+            <select id="taskAssignee"></select>
+          </div>
+          <div>
+            <label for="taskDueDate">Prazo</label>
+            <input id="taskDueDate" type="date">
+          </div>
+          <div>
+            <label for="taskPriority">Prioridade</label>
+            <select id="taskPriority">
+              <option value="low">Baixa</option>
+              <option value="medium">Média</option>
+              <option value="high">Alta</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Labels são apresentados como chips de texto, sem interpretar conteúdo como HTML. -->
+        <section class="task-section" aria-labelledby="labelsHeading">
+          <h2 id="labelsHeading">Labels</h2>
+          <div class="chip-list" id="taskLabels" aria-live="polite"></div>
+          <div class="inline-entry" id="labelEntry">
+            <label class="visually-hidden" for="newLabel">Nova label</label>
+            <input id="newLabel" maxlength="30" list="labelSuggestions" placeholder="Adicionar label">
+            <datalist id="labelSuggestions">
+              <option value="bug"></option>
+              <option value="feature"></option>
+              <option value="urgente"></option>
+            </datalist>
+            <button class="btn-ghost" id="addLabel" type="button">Adicionar</button>
+          </div>
+        </section>
+
+        <!-- Checklist editável atualiza a indicação de progresso enquanto os dados são ajustados. -->
+        <section class="task-section" aria-labelledby="checklistHeading">
+          <div class="section-title-row">
+            <h2 id="checklistHeading">Checklist</h2>
+            <div class="checklist-progress-wrap">
+              <progress id="checklistProgressBar" max="0" value="0" aria-label="Progresso do checklist"></progress>
+              <span class="checklist-progress" id="checklistProgress">0/0</span>
+            </div>
+          </div>
+          <div class="checklist-list" id="taskChecklist"></div>
+          <div class="inline-entry" id="checklistEntry">
+            <label class="visually-hidden" for="newChecklistItem">Novo item do checklist</label>
+            <input id="newChecklistItem" maxlength="120" placeholder="Adicionar item">
+            <button class="btn-ghost" id="addChecklistItem" type="button">Adicionar</button>
+          </div>
+        </section>
+
+        <div class="actions task-save-actions">
+          <button class="btn-primary" id="saveTaskChanges" type="submit">Salvar alterações</button>
+        </div>
+      </form>
+
+      <!-- Comentários têm listener próprio para aparecerem em ordem cronológica em tempo real. -->
+      <section class="task-section comments-section" aria-labelledby="commentsHeading">
+        <h2 id="commentsHeading">Comentários</h2>
+        <ol class="comment-list" id="commentList" aria-live="polite"></ol>
+        <form id="commentForm">
+          <label for="commentText">Adicionar comentário</label>
+          <textarea id="commentText" maxlength="2000" rows="3" required placeholder="Escreva um comentário"></textarea>
+          <div class="actions">
+            <button class="btn-primary" id="submitComment" type="submit">Comentar</button>
+          </div>
+        </form>
+      </section>
+    </section>
+  </main>
+
+  <!-- Toast único mantém mensagens acessíveis e consistentes com a página do quadro. -->
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <button class="theme-toggle" id="themeToggle" type="button">🌙 Escuro</button>
+  <script type="module" src="task.js"></script>
+</body>
+</html>

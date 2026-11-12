@@ -47,6 +47,27 @@ async function saveUserProfile(user, preferredName) {
   return name;
 }
 
+// Restaura apenas retornos de tarefa do mesmo site após o login, evitando redirecionamentos externos.
+function redirectToPendingTask() {
+  try {
+    const savedUrl = sessionStorage.getItem("trilha-return-url");
+    if (!savedUrl) return false;
+    const target = new URL(savedUrl, window.location.href);
+    const isTaskPage = target.origin === window.location.origin
+      && target.pathname.endsWith("/task.html")
+      && target.searchParams.has("board")
+      && target.searchParams.has("id");
+    sessionStorage.removeItem("trilha-return-url");
+    if (!isTaskPage) return false;
+    window.location.replace(target.href);
+    return true;
+  } catch (error) {
+    console.error("Não foi possível restaurar a página solicitada:", error);
+    notify("Não foi possível voltar à tarefa solicitada.");
+    return false;
+  }
+}
+
 // Controla a navegação de autenticação sem recriar formulários ou perder acessibilidade.
 const views = {
   home: $("viewHome"),
@@ -178,6 +199,7 @@ onAuthStateChanged(auth, async user => {
   if (user) {
     try {
       const name = await saveUserProfile(user);
+      if (redirectToPendingTask()) return;
       const sessionUser = { uid: user.uid, email: user.email || "", displayName: name };
       $("userName").textContent = `Olá, ${name}`;
       $("kanbanUserName").textContent = `Olá, ${name}`;

@@ -361,11 +361,68 @@ function createTaskCard(task) {
   const title = document.createElement("h3");
   title.textContent = task.title || "";
   card.appendChild(title);
+  const taskUrl = new URL("task.html", window.location.href);
+  taskUrl.searchParams.set("board", state.currentBoard.id);
+  taskUrl.searchParams.set("id", task.id);
+  const openLink = document.createElement("a");
+  openLink.className = "open-task-link";
+  openLink.href = taskUrl.href;
+  openLink.target = "_blank";
+  openLink.rel = "noopener";
+  openLink.textContent = "Abrir ↗";
+  openLink.setAttribute("aria-label", `Abrir tarefa ${task.title || ""} em nova aba`);
+  card.appendChild(openLink);
   if (task.desc) {
     const description = document.createElement("p");
     description.textContent = task.desc;
     card.appendChild(description);
   }
+
+  // Apresenta metadados mantidos pela página própria da tarefa também no quadro em tempo real.
+  const metadata = document.createElement("div");
+  metadata.className = "task-metadata";
+  const assignee = document.createElement("span");
+  assignee.className = "task-assignee";
+  assignee.textContent = task.assigneeName || "Sem responsável";
+  metadata.appendChild(assignee);
+  const priorityNames = { low: "Baixa", medium: "Média", high: "Alta" };
+  const priority = task.priority || "medium";
+  const priorityBadge = document.createElement("span");
+  priorityBadge.className = "priority-badge";
+  priorityBadge.dataset.priority = priority;
+  priorityBadge.textContent = priorityNames[priority] || "Média";
+  metadata.appendChild(priorityBadge);
+  const due = document.createElement("span");
+  due.className = "task-due";
+  if (task.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)) {
+    const [year, month, day] = task.dueDate.split("-");
+    due.textContent = `Prazo: ${day}/${month}/${year}`;
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    if (task.dueDate < today) due.classList.add("overdue");
+  } else {
+    due.textContent = "Sem prazo";
+  }
+  metadata.appendChild(due);
+  if (Array.isArray(task.labels) && task.labels.length) {
+    const labels = document.createElement("div");
+    labels.className = "card-labels";
+    task.labels.forEach(label => {
+      const chip = document.createElement("span");
+      chip.className = "task-chip";
+      chip.textContent = label;
+      labels.appendChild(chip);
+    });
+    metadata.appendChild(labels);
+  }
+  if (Array.isArray(task.checklist) && task.checklist.length) {
+    const completed = task.checklist.filter(item => item.done).length;
+    const progress = document.createElement("span");
+    progress.className = "card-checklist-progress";
+    progress.textContent = `Checklist ${completed}/${task.checklist.length}`;
+    metadata.appendChild(progress);
+  }
+  card.appendChild(metadata);
 
   // Mantém o seletor móvel de status para papéis que podem editar tarefas.
   if (state.role !== "VIEWER") {
@@ -386,8 +443,8 @@ function createTaskCard(task) {
     const edit = document.createElement("button");
     edit.className = "edit-task";
     edit.type = "button";
-    edit.textContent = "Editar";
-    edit.setAttribute("aria-label", `Editar tarefa ${task.title || ""}`);
+    edit.textContent = "✎";
+    edit.setAttribute("aria-label", `Editar título e descrição da tarefa ${task.title || ""}`);
     edit.addEventListener("click", () => openTaskModal(task));
     card.appendChild(edit);
 
