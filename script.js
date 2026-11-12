@@ -51,6 +51,7 @@ function authMessage(e) {
 // ================= TELAS =================
 const views = { home: $('viewHome'), login: $('viewLogin'), signup: $('viewSignup'), app: $('viewApp') };
 function show(name) {
+  document.body.classList.toggle('in-app', name === 'app');
   Object.entries(views).forEach(([k, el]) => el.hidden = k !== name);
   $('loginError').textContent = $('signupError').textContent = '';
   document.querySelectorAll('[data-toggle]').forEach(b => { $(b.dataset.toggle).type = 'password'; b.textContent = 'Mostrar'; });

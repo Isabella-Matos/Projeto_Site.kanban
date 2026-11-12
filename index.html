@@ -1,85 +1,172 @@
+<!-- Estrutura acessível do Trilha: autenticação, quadros compartilhados e modais. -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quadro Kanban</title>
+<title>Trilha</title>
+<script src="theme.js"></script>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- ============ PÁGINA INICIAL ============ -->
-<section class="auth" id="viewHome">
-  <div class="auth-card">
-    <h1>Quadro Kanban</h1>
-    <p class="subtitle">Organize suas tarefas em A Fazer, Em Andamento e Concluído.</p>
-    <button class="btn-primary" data-go="login">Entrar</button>
-    <button class="btn-ghost" data-go="signup">Criar conta</button>
-  </div>
-</section>
-
-<!-- ============ TELA: ENTRAR ============ -->
-<section class="auth" id="viewLogin" hidden>
-  <div class="auth-card">
-    <h1>Entrar</h1>
-    <p class="subtitle">Acesse seu quadro de tarefas.</p>
-    <form id="loginForm" novalidate>
-      <label for="loginEmail">E-mail ou nome de usuário</label>
-      <input id="loginEmail" type="text" autocomplete="username" placeholder="voce@exemplo.com" required>
-      <label for="loginPass">Senha</label>
-      <div class="pw">
-        <input id="loginPass" type="password" autocomplete="current-password" required>
-        <button type="button" class="toggle" data-toggle="loginPass" aria-label="Mostrar senha">Mostrar</button>
+<div class="auth-shell">
+  <aside class="auth-hero">
+    <div class="hero-content">
+      <p class="brand"><span class="brand-icon" aria-hidden="true"></span>Trilha</p>
+      <h2>Organize seu dia, uma tarefa de cada vez.</h2>
+      <p class="hero-copy">Crie tarefas, arraste entre as colunas e acesse de qualquer dispositivo.</p>
+      <div class="mini-board" aria-hidden="true">
+        <div class="mini-column"><span>A Fazer</span><i></i><i></i><i></i></div>
+        <div class="mini-column"><span>Em Andamento</span><i></i><i></i><i></i></div>
+        <div class="mini-column"><span>Concluído</span><i></i><i></i><i></i></div>
       </div>
-      <p class="error" id="loginError" role="alert"></p>
-      <button class="btn-primary" type="submit">Entrar</button>
-    </form>
-    <p class="switch">Ainda não tem conta? <button class="link" data-go="signup">Criar conta</button></p>
-    <p class="switch"><button class="link" data-go="home">Voltar à página inicial</button></p>
-  </div>
-</section>
-
-<!-- ============ TELA 2: CRIAR CONTA ============ -->
-<section class="auth" id="viewSignup" hidden>
-  <div class="auth-card">
-    <h1>Criar conta</h1>
-    <p class="subtitle">Leva menos de um minuto.</p>
-    <form id="signupForm" novalidate>
-      <label for="signName">Nome</label>
-      <input id="signName" type="text" autocomplete="name" maxlength="60" placeholder="Seu nome" required>
-      <label for="signEmail">E-mail</label>
-      <input id="signEmail" type="email" autocomplete="email" placeholder="voce@exemplo.com" required>
-      <label for="signPass">Senha</label>
-      <div class="pw">
-        <input id="signPass" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo de 6 caracteres" required>
-        <button type="button" class="toggle" data-toggle="signPass" aria-label="Mostrar senha">Mostrar</button>
+    </div>
+  </aside>
+  <div class="auth-panels">
+    <!-- ============ PÁGINA INICIAL ============ -->
+    <section class="auth" id="viewHome">
+      <div class="auth-card">
+        <p class="auth-brand"><span class="brand-icon" aria-hidden="true"></span>Trilha</p>
+        <h1>Trilha</h1>
+        <p class="subtitle">Organize seu dia, uma tarefa de cada vez.</p>
+        <button class="btn-primary" data-go="login">Entrar</button>
+        <button class="btn-ghost" data-go="signup">Criar conta</button>
       </div>
-      <p class="error" id="signupError" role="alert"></p>
-      <button class="btn-primary" type="submit">Criar conta</button>
-    </form>
-    <p class="switch">Já tem uma conta? <button class="link" data-go="login">Entrar</button></p>
-    <p class="switch"><button class="link" data-go="home">Voltar à página inicial</button></p>
-  </div>
-</section>
+    </section>
 
-<!-- ============ TELA 3: QUADRO KANBAN ============ -->
-<div id="viewApp" hidden>
-  <header>
-    <div>
-      <h1>Quadro Kanban</h1>
-      <p class="subtitle">Arraste os cards entre as colunas.</p>
-    </div>
-    <div class="header-actions">
-      <span class="user" id="userName"></span>
-      <button class="btn-primary" id="openModal">+ Adicionar nova tarefa</button>
-      <button class="btn-ghost" id="logout">Sair</button>
-    </div>
-  </header>
-  <main class="board" id="board"></main>
+    <!-- ============ TELA: ENTRAR ============ -->
+    <section class="auth" id="viewLogin" hidden>
+      <div class="auth-card">
+        <p class="auth-brand"><span class="brand-icon" aria-hidden="true"></span>Trilha</p>
+        <h1>Entrar</h1>
+        <p class="subtitle">Acesse seu quadro de tarefas.</p>
+        <form id="loginForm" novalidate>
+          <label for="loginEmail">E-mail ou nome de usuário</label>
+          <input id="loginEmail" type="text" autocomplete="username" placeholder="voce@exemplo.com" required>
+          <label for="loginPass">Senha</label>
+          <div class="pw">
+            <input id="loginPass" type="password" autocomplete="current-password" required>
+            <button type="button" class="toggle" data-toggle="loginPass" aria-label="Mostrar senha">Mostrar</button>
+          </div>
+          <p class="error" id="loginError" role="alert"></p>
+          <button class="btn-primary" type="submit">Entrar</button>
+        </form>
+        <p class="switch">Ainda não tem conta? <button class="link" data-go="signup">Criar conta</button></p>
+        <p class="switch"><button class="link" data-go="home">Voltar à página inicial</button></p>
+      </div>
+    </section>
+
+    <!-- ============ TELA 2: CRIAR CONTA ============ -->
+    <section class="auth" id="viewSignup" hidden>
+      <div class="auth-card">
+        <p class="auth-brand"><span class="brand-icon" aria-hidden="true"></span>Trilha</p>
+        <h1>Criar conta</h1>
+        <p class="subtitle">Leva menos de um minuto.</p>
+        <form id="signupForm" novalidate>
+          <label for="signName">Nome</label>
+          <input id="signName" type="text" autocomplete="name" maxlength="60" placeholder="Seu nome" required>
+          <label for="signEmail">E-mail</label>
+          <input id="signEmail" type="email" autocomplete="email" placeholder="voce@exemplo.com" required>
+          <label for="signPass">Senha</label>
+          <div class="pw">
+            <input id="signPass" type="password" autocomplete="new-password" minlength="6" placeholder="Mínimo de 6 caracteres" required>
+            <button type="button" class="toggle" data-toggle="signPass" aria-label="Mostrar senha">Mostrar</button>
+          </div>
+          <p class="error" id="signupError" role="alert"></p>
+          <button class="btn-primary" type="submit">Criar conta</button>
+        </form>
+        <p class="switch">Já tem uma conta? <button class="link" data-go="login">Entrar</button></p>
+        <p class="switch"><button class="link" data-go="home">Voltar à página inicial</button></p>
+      </div>
+    </section>
+  </div>
 </div>
 
-<!-- Modal de nova tarefa -->
-<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+<!-- ============ ÁREA AUTENTICADA ============ -->
+<div id="viewApp" hidden>
+  <section id="viewBoards" hidden aria-labelledby="boardsTitle">
+    <header>
+      <div>
+        <h1 id="boardsTitle">Meus quadros</h1>
+        <p class="subtitle">Organize suas tarefas em espaços compartilhados.</p>
+      </div>
+      <div class="header-actions">
+        <span class="user" id="userName"></span>
+        <button class="btn-primary" id="openBoardModal" type="button">+ Novo quadro</button>
+        <button class="btn-ghost" id="logout" type="button">Sair</button>
+      </div>
+    </header>
+    <main class="boards-page">
+      <section aria-labelledby="ownedBoardsTitle">
+        <h2 id="ownedBoardsTitle" class="list-title">Meus quadros</h2>
+        <div class="board-list" id="ownedBoards" aria-live="polite"></div>
+      </section>
+      <section aria-labelledby="sharedBoardsTitle">
+        <h2 id="sharedBoardsTitle" class="list-title">Compartilhados comigo</h2>
+        <div class="board-list" id="sharedBoards" aria-live="polite"></div>
+      </section>
+    </main>
+  </section>
+
+  <section id="viewKanban" hidden aria-labelledby="currentBoardName">
+    <header>
+      <div>
+        <button class="btn-ghost back-button" id="backToBoards" type="button">← Meus quadros</button>
+        <h1 id="currentBoardName">Trilha</h1>
+        <p class="subtitle" id="boardSubtitle">Arraste os cards entre as colunas.</p>
+      </div>
+      <div class="header-actions">
+        <span class="user" id="kanbanUserName"></span>
+        <span class="readonly-badge" id="readonlyBadge" hidden>Somente leitura</span>
+        <button class="btn-ghost" id="shareBoard" type="button" hidden>Compartilhar</button>
+        <button class="btn-primary" id="openModal" type="button">+ Adicionar nova tarefa</button>
+        <button class="btn-ghost" id="logoutBoard" type="button">Sair</button>
+      </div>
+    </header>
+    <main class="board" id="board" aria-label="Colunas de tarefas"></main>
+  </section>
+</div>
+
+<!-- Modal para criar um quadro próprio. -->
+<div class="overlay" id="boardOverlay" role="dialog" aria-modal="true" aria-labelledby="boardModalTitle" aria-hidden="true">
+  <div class="modal">
+    <h2 id="boardModalTitle">Novo quadro</h2>
+    <form id="boardForm">
+      <label for="boardNameInput">Nome do quadro</label>
+      <input id="boardNameInput" maxlength="80" required placeholder="Ex.: Projeto da equipe">
+      <div class="actions">
+        <button type="button" class="btn-ghost" id="cancelBoard">Cancelar</button>
+        <button type="submit" class="btn-primary">Criar quadro</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal para convidar e administrar membros de um quadro. -->
+<div class="overlay" id="shareOverlay" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle" aria-hidden="true">
+  <div class="modal share-modal">
+    <h2 id="shareModalTitle">Compartilhar quadro</h2>
+    <form id="inviteForm">
+      <label for="inviteEmail">E-mail da pessoa</label>
+      <input id="inviteEmail" type="email" autocomplete="email" required placeholder="pessoa@exemplo.com">
+      <label for="inviteRole">Papel</label>
+      <select id="inviteRole">
+        <option value="EDITOR">Editor</option>
+        <option value="VIEWER">Leitor</option>
+      </select>
+      <div class="actions">
+        <button type="button" class="btn-ghost" id="closeShare">Fechar</button>
+        <button type="submit" class="btn-primary">Convidar</button>
+      </div>
+    </form>
+    <h3 class="members-title">Membros</h3>
+    <div id="memberList" class="member-list" aria-live="polite"></div>
+  </div>
+</div>
+
+<!-- Modal para criar e editar tarefas do quadro atual. -->
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true">
   <div class="modal">
     <h2 id="modalTitle">Nova tarefa</h2>
     <form id="taskForm">
@@ -95,8 +182,10 @@
   </div>
 </div>
 
+<!-- Região única de anúncios acessíveis para mensagens de sucesso e erro. -->
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+<button class="theme-toggle" id="themeToggle" type="button">🌙 Escuro</button>
 <script type="module" src="script.js"></script>
 </body>
 </html>
