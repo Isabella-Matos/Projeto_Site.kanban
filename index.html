@@ -1,4 +1,4 @@
-<!-- Estrutura acessível do Trilha: autenticação, quadros compartilhados e modais. -->
+<!-- Estrutura acessível da autenticação, dos quadros compartilhados e dos modais do Trilha. -->
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -128,7 +128,7 @@
   </section>
 </div>
 
-<!-- Modal para criar um quadro próprio. -->
+<!-- Modal para criar quadro; a gravação do quadro antecede a do membro proprietário. -->
 <div class="overlay" id="boardOverlay" role="dialog" aria-modal="true" aria-labelledby="boardModalTitle" aria-hidden="true">
   <div class="modal">
     <h2 id="boardModalTitle">Novo quadro</h2>
@@ -143,7 +143,7 @@
   </div>
 </div>
 
-<!-- Modal para convidar e administrar membros de um quadro. -->
+<!-- Modal para convidar pessoas e administrar membros do quadro. -->
 <div class="overlay" id="shareOverlay" role="dialog" aria-modal="true" aria-labelledby="shareModalTitle" aria-hidden="true">
   <div class="modal share-modal">
     <h2 id="shareModalTitle">Compartilhar quadro</h2>
@@ -165,7 +165,7 @@
   </div>
 </div>
 
-<!-- Modal para criar e editar tarefas do quadro atual. -->
+<!-- Modal de criação e edição das tarefas do quadro atual. -->
 <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-hidden="true">
   <div class="modal">
     <h2 id="modalTitle">Nova tarefa</h2>
@@ -182,7 +182,6 @@
   </div>
 </div>
 
-<!-- Região única de anúncios acessíveis para mensagens de sucesso e erro. -->
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <button class="theme-toggle" id="themeToggle" type="button">🌙 Escuro</button>

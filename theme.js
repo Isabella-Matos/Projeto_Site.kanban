@@ -1,3 +1,4 @@
+// Aplica e persiste o tema de cores escolhido, respeitando a preferência inicial do sistema.
 (function () {
   // Tenta recuperar a preferência do usuário salva no navegador.
   // Se não existir ou for inválida, usa a preferência do sistema.

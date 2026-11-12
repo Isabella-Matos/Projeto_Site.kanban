@@ -1,9 +1,9 @@
-// Módulo compartilhado que inicializa o Firebase uma única vez para o Trilha.
+// Inicializa o Firebase uma única vez para compartilhar autenticação e Firestore entre módulos.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// Configuração do projeto Firebase já utilizado pela aplicação.
+// Mantém a configuração existente do projeto para preservar as contas e os dados atuais.
 const firebaseConfig = {
   apiKey: "AIzaSyAzN3XQazXsW5xCQR4SBRuE1KMdN9mI6kY",
   authDomain: "kanban-7994e.firebaseapp.com",
@@ -13,7 +13,7 @@ const firebaseConfig = {
   appId: "1:851123843265:web:50f7ce5bf4cae665876440"
 };
 
-// Exporta instâncias únicas para autenticação e acesso ao Firestore.
+// Exporta os serviços compartilhados para autenticação e quadros.
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
