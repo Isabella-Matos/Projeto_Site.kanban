@@ -25,9 +25,18 @@ const state = {
   checklist: [],
   dirty: false,
   taskUnsubscribe: null,
+  boardUnsubscribe: null,
+  boardTasksUnsubscribe: null,
   membersUnsubscribe: null,
-  commentsUnsubscribe: null
+  commentsUnsubscribe: null,
+  wip: { todo: 0, doing: 3, done: 0 },
+  taskCounts: { todo: 0, doing: 0, done: 0 },
+  taskCountsReady: false,
+  boardConfigReady: false
 };
+
+// Mantém sugestões limitadas e consistentes entre a página da tarefa e os cartões do quadro.
+const LABEL_SUGGESTIONS = ["bug", "feature", "urgente"];
 
 // Mantém atalhos de seleção e de anúncios locais simples.
 const $ = id => document.getElementById(id);
@@ -70,7 +79,8 @@ function showState(message, showPanel = false) {
 function applyRole() {
   const readOnly = state.role === "VIEWER";
   $("taskReadonlyBadge").hidden = !readOnly;
-  ["taskTitle", "taskDescription", "taskStatus", "taskAssignee", "taskDueDate", "taskPriority", "newLabel",
+  ["taskTitle", "taskDescription", "taskStatus", "taskAssignee", "taskDueDate", "taskPriority", "taskStoryPoints",
+    "taskAcceptanceCriteria", "taskDodMet", "newLabel",
     "addLabel", "newChecklistItem", "addChecklistItem", "saveTaskChanges"].forEach(id => {
     $(id).disabled = readOnly;
   });
@@ -94,11 +104,16 @@ function populateTask(task) {
   $("taskStatus").value = ["todo", "doing", "done"].includes(task.status) ? task.status : "todo";
   $("taskDueDate").value = task.dueDate || "";
   $("taskPriority").value = ["low", "medium", "high"].includes(task.priority) ? task.priority : "medium";
+  $("taskStoryPoints").value = [1, 2, 3, 5, 8, 13].includes(Number(task.storyPoints))
+    ? String(task.storyPoints) : "1";
+  $("taskAcceptanceCriteria").value = task.acceptanceCriteria || "";
+  $("taskDodMet").checked = Boolean(task.dodMet);
   state.labels = Array.isArray(task.labels) ? [...task.labels] : [];
   state.checklist = Array.isArray(task.checklist)
     ? task.checklist.map(item => ({ text: String(item.text || ""), done: Boolean(item.done) }))
     : [];
   renderLabels();
+  renderLabelSuggestions();
   renderChecklist();
   renderAssigneeOptions();
   const badge = $("taskPriorityBadge");
@@ -118,7 +133,7 @@ function renderLabels() {
   container.replaceChildren();
   state.labels.forEach((label, index) => {
     const chip = document.createElement("span");
-    chip.className = "task-chip";
+    chip.className = `task-chip ${labelColorClass(label)}`;
     const text = document.createElement("span");
     text.textContent = label;
     chip.appendChild(text);
@@ -126,11 +141,13 @@ function renderLabels() {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.textContent = "×";
+      remove.title = "Remover label";
       remove.setAttribute("aria-label", `Remover label ${label}`);
       remove.addEventListener("click", () => {
         state.labels.splice(index, 1);
         markDirty();
         renderLabels();
+        renderLabelSuggestions();
       });
       chip.appendChild(remove);
     }
@@ -142,6 +159,45 @@ function renderLabels() {
     empty.textContent = "Nenhuma label";
     container.appendChild(empty);
   }
+}
+
+// Oferece labels comuns como botões acionáveis e desativa sugestões já usadas ou em modo de leitura.
+function renderLabelSuggestions() {
+  const container = $("labelSuggestions");
+  container.replaceChildren();
+  const heading = document.createElement("span");
+  heading.className = "suggestions-heading";
+  heading.textContent = "Sugestões:";
+  container.appendChild(heading);
+  LABEL_SUGGESTIONS.forEach(suggestion => {
+    const alreadyAdded = state.labels.some(label =>
+      label.toLocaleLowerCase("pt-BR") === suggestion.toLocaleLowerCase("pt-BR")
+    );
+    if (alreadyAdded) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `task-chip suggestion-chip ${suggestion === "urgente" ? "label-urgent" : `label-${suggestion}`}`;
+    button.textContent = suggestion;
+    button.disabled = state.role === "VIEWER";
+    button.setAttribute("aria-label", `Adicionar label ${suggestion}`);
+    button.addEventListener("click", () => addLabel(suggestion));
+    container.appendChild(button);
+  });
+  if (container.children.length === 1) {
+    const empty = document.createElement("span");
+    empty.className = "task-muted";
+    empty.textContent = "Todas as sugestões já foram adicionadas.";
+    container.appendChild(empty);
+  }
+}
+
+// Reutiliza a mesma codificação visual de labels usada nos cartões do quadro.
+function labelColorClass(label) {
+  const normalized = String(label).trim().toLocaleLowerCase("pt-BR");
+  if (normalized === "bug") return "label-bug";
+  if (normalized === "feature") return "label-feature";
+  if (normalized === "urgente") return "label-urgent";
+  return "label-neutral";
 }
 
 // Atualiza itens e progresso do checklist sem usar HTML construído a partir dos dados.
@@ -236,6 +292,52 @@ function listenToTask() {
   });
 }
 
+// Mantém a configuração Scrum do quadro em tempo real para exibir DoD e aplicar limites WIP atuais.
+function listenToBoardConfig() {
+  state.boardUnsubscribe = onSnapshot(doc(db, "boards", boardId), snapshot => {
+    if (!snapshot.exists()) {
+      state.boardConfigReady = false;
+      showState("Você não tem acesso a este quadro.");
+      return;
+    }
+    const board = snapshot.data();
+    const savedWip = board.wip || {};
+    state.wip = {
+      todo: validWip(savedWip.todo, 0),
+      doing: validWip(savedWip.doing, 3),
+      done: validWip(savedWip.done, 0)
+    };
+    state.boardConfigReady = true;
+    $("definitionOfDoneText").textContent = board.definitionOfDone || "O proprietário ainda não configurou uma Definition of Done.";
+  }, error => {
+    state.boardConfigReady = false;
+    const message = error.code === "permission-denied"
+      ? "Você não tem acesso a este quadro."
+      : errorMessage(error, "carregar as configurações do quadro");
+    showState(message);
+    notify(message);
+  });
+}
+
+// Converte limites armazenados em inteiros válidos sem tratar valores ausentes como limites negativos.
+function validWip(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+// Mantém a contagem real de tarefas por status para validar mudanças de status fora do Kanban.
+function listenToBoardTasks() {
+  state.boardTasksUnsubscribe = onSnapshot(collection(db, "boards", boardId, "tasks"), snapshot => {
+    const counts = { todo: 0, doing: 0, done: 0 };
+    snapshot.docs.forEach(taskDocument => {
+      const status = taskDocument.data().status;
+      if (Object.prototype.hasOwnProperty.call(counts, status)) counts[status] += 1;
+    });
+    state.taskCounts = counts;
+    state.taskCountsReady = true;
+  }, error => notify(errorMessage(error, "verificar os limites WIP")));
+}
+
 // Carrega os membros do quadro em tempo real para selecionar responsáveis e refletir nomes atualizados.
 function listenToMembers() {
   state.membersUnsubscribe = onSnapshot(collection(db, "boards", boardId, "members"), snapshot => {
@@ -317,6 +419,8 @@ async function authorizeAndLoad(user) {
     $("backToBoard").href = boardUrl();
     listenToMembers();
     listenToTask();
+    listenToBoardConfig();
+    listenToBoardTasks();
     listenToComments();
   } catch (error) {
     if (error.code === "permission-denied") {
@@ -338,16 +442,36 @@ async function saveTask(event) {
     notify("O título da tarefa é obrigatório.");
     return;
   }
+  const nextStatus = $("taskStatus").value;
+  const currentStatus = state.task.status;
+  const nextStatusLimit = state.wip[nextStatus];
+  if (nextStatus !== currentStatus && !state.boardConfigReady) {
+    notify("Aguarde o carregamento das configurações do quadro e tente novamente.");
+    return;
+  }
+  if (nextStatus !== currentStatus && !state.taskCountsReady) {
+    notify("Aguarde a verificação do limite WIP e tente novamente.");
+    return;
+  }
+  if (nextStatus !== currentStatus && nextStatusLimit > 0
+    && state.taskCounts[nextStatus] >= nextStatusLimit) {
+    notify("Limite de WIP da coluna atingido.");
+    $("taskStatus").focus();
+    return;
+  }
   const assigneeId = $("taskAssignee").value;
   const assignee = state.members.find(member => member.uid === assigneeId);
   const changes = {
     title,
     desc: $("taskDescription").value.trim(),
-    status: $("taskStatus").value,
+    status: nextStatus,
     assigneeId,
     assigneeName: assignee ? assignee.name || assignee.email || "" : "",
     dueDate: $("taskDueDate").value,
     priority: $("taskPriority").value,
+    storyPoints: Number($("taskStoryPoints").value),
+    acceptanceCriteria: $("taskAcceptanceCriteria").value.trim(),
+    dodMet: $("taskDodMet").checked,
     labels: [...state.labels],
     checklist: state.checklist.map(item => ({ text: item.text, done: item.done }))
   };
@@ -368,18 +492,19 @@ async function saveTask(event) {
 }
 
 // Adiciona uma label única a partir do campo de texto e mantém a entrada acessível por teclado.
-function addLabel() {
+function addLabel(suggestedLabel = "") {
   const input = $("newLabel");
-  const label = input.value.trim();
+  const label = (suggestedLabel || input.value).trim();
   if (!label) return;
   if (state.labels.some(existing => existing.toLocaleLowerCase("pt-BR") === label.toLocaleLowerCase("pt-BR"))) {
     notify("Essa label já foi adicionada.");
     return;
   }
   state.labels.push(label);
-  input.value = "";
+  if (!suggestedLabel) input.value = "";
   markDirty();
   renderLabels();
+  renderLabelSuggestions();
 }
 
 // Inclui um item pendente no checklist sem enviar dados até a pessoa salvar as alterações.
@@ -423,6 +548,16 @@ function initializeTaskPage() {
   $("backToBoard").href = boardUrl();
   $("taskForm").addEventListener("input", markDirty);
   $("taskForm").addEventListener("change", markDirty);
+  $("taskStatus").addEventListener("change", () => {
+    const nextStatus = $("taskStatus").value;
+    const currentStatus = state.task?.status;
+    const limit = state.wip[nextStatus];
+    if (!state.task || nextStatus === currentStatus || limit === 0) return;
+    if (!state.taskCountsReady || !state.boardConfigReady) return;
+    if (state.taskCounts[nextStatus] < limit) return;
+    $("taskStatus").value = currentStatus;
+    notify("Limite de WIP da coluna atingido.");
+  });
   $("taskForm").addEventListener("submit", saveTask);
   $("addLabel").addEventListener("click", addLabel);
   $("newLabel").addEventListener("keydown", event => {
@@ -466,6 +601,8 @@ function initializeTaskPage() {
 // Libera listeners ao sair da página para evitar atualizações em uma tela já fechada.
 window.addEventListener("pagehide", () => {
   if (state.taskUnsubscribe) state.taskUnsubscribe();
+  if (state.boardUnsubscribe) state.boardUnsubscribe();
+  if (state.boardTasksUnsubscribe) state.boardTasksUnsubscribe();
   if (state.membersUnsubscribe) state.membersUnsubscribe();
   if (state.commentsUnsubscribe) state.commentsUnsubscribe();
 });

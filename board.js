@@ -34,6 +34,8 @@ const state = {
   membersUnsubscribe: null,
   boards: [],
   tasks: [],
+  members: [],
+  filters: { priority: "", label: "", assignee: "" },
   currentBoard: null,
   role: null,
   draggedId: null,
@@ -95,6 +97,27 @@ export function initBoardUi({ db, user, notify }) {
   });
   $("inviteForm").addEventListener("submit", inviteMember);
 
+  // Mantém a configuração de limites e Definition of Done restrita ao proprietário.
+  $("openBoardSettings").addEventListener("click", openSettingsModal);
+  $("cancelSettings").addEventListener("click", () => setOverlay($("settingsOverlay"), false));
+  $("settingsOverlay").addEventListener("click", event => {
+    if (event.target === $("settingsOverlay")) setOverlay($("settingsOverlay"), false);
+  });
+  $("settingsForm").addEventListener("submit", saveBoardSettings);
+
+  // Aplica filtros somente à renderização e preserva a escuta Firestore sem filtros.
+  ["filterPriority", "filterLabel", "filterAssignee"].forEach(id => {
+    $(id).addEventListener("change", () => {
+      state.filters = {
+        priority: $("filterPriority").value,
+        label: $("filterLabel").value,
+        assignee: $("filterAssignee").value
+      };
+      renderTasks();
+    });
+  });
+  $("clearBoardFilters").addEventListener("click", clearBoardFilters);
+
   // Prepara o formulário de tarefas para criação e edição usando a mesma interface existente.
   $("openModal").addEventListener("click", () => openTaskModal());
   $("cancel").addEventListener("click", () => closeTaskModal());
@@ -110,6 +133,7 @@ export function initBoardUi({ db, user, notify }) {
     if (event.key === "Escape") {
       setOverlay($("boardOverlay"), false);
       setOverlay($("shareOverlay"), false);
+      setOverlay($("settingsOverlay"), false);
       closeTaskModal();
     }
   });
@@ -134,7 +158,10 @@ export function startBoardSession({ db, user, notify }) {
     if (state.currentBoard) {
       const current = state.boards.find(board => board.id === state.currentBoard.id);
       if (!current) returnToBoards(false);
-      else state.currentBoard = current;
+      else {
+        state.currentBoard = current;
+        renderTasks();
+      }
     }
     const requestedId = new URLSearchParams(window.location.search).get("board");
     if (requestedId && state.directBoardAttempt !== requestedId) {
@@ -153,6 +180,8 @@ export function stopBoardSession() {
   stopBoardListeners();
   state.boards = [];
   state.tasks = [];
+  state.members = [];
+  state.filters = { priority: "", label: "", assignee: "" };
   state.currentBoard = null;
   state.role = null;
   state.directBoardAttempt = null;
@@ -160,6 +189,7 @@ export function stopBoardSession() {
   $("sharedBoards").replaceChildren();
   $("board").replaceChildren();
   $("memberList").replaceChildren();
+  resetBoardFilters();
 }
 
 // Para os listeners que dependem do usuário ou do quadro atualmente aberto.
@@ -239,6 +269,7 @@ async function createBoard(event) {
       name,
       ownerId: state.user.uid,
       memberIds: [state.user.uid],
+      wip: { todo: 0, doing: 3, done: 0 },
       createdAt: Date.now()
     });
     await setDoc(doc(state.db, "boards", boardReference.id, "members", state.user.uid), {
@@ -268,6 +299,7 @@ async function openBoard(board, updateUrl) {
     state.role = memberSnapshot.data().role;
     $("currentBoardName").textContent = board.name || "Trilha";
     $("shareBoard").hidden = state.role !== "OWNER";
+    $("openBoardSettings").hidden = state.role !== "OWNER";
     $("readonlyBadge").hidden = state.role !== "VIEWER";
     $("openModal").hidden = state.role === "VIEWER";
     $("boardSubtitle").textContent = state.role === "VIEWER"
@@ -280,14 +312,134 @@ async function openBoard(board, updateUrl) {
       window.history.pushState({ board: board.id }, "", url);
     }
     listenToTasks(board.id);
-    if (state.role === "OWNER") listenToMembers(board.id);
-    else {
-      if (state.membersUnsubscribe) state.membersUnsubscribe();
-      state.membersUnsubscribe = null;
-    }
+    state.filters = { priority: "", label: "", assignee: "" };
+    resetBoardFilters();
+    listenToMembers(board.id);
   } catch (error) {
     state.notify(errorMessage(error, "abrir o quadro"));
   }
+}
+
+// Converte limites recebidos do Firestore em inteiros válidos e usa o padrão da interface para dados antigos.
+function boardWip(board = state.currentBoard) {
+  const saved = board?.wip || {};
+  return {
+    todo: Number.isInteger(Number(saved.todo)) && Number(saved.todo) >= 0 ? Number(saved.todo) : 0,
+    doing: Number.isInteger(Number(saved.doing)) && Number(saved.doing) >= 0 ? Number(saved.doing) : 3,
+    done: Number.isInteger(Number(saved.done)) && Number(saved.done) >= 0 ? Number(saved.done) : 0
+  };
+}
+
+// Abre as configurações já preenchidas, evitando substituir limites que já estejam salvos.
+function openSettingsModal() {
+  if (state.role !== "OWNER" || !state.currentBoard) return;
+  const wip = boardWip();
+  $("wipTodo").value = String(wip.todo);
+  $("wipDoing").value = String(wip.doing);
+  $("wipDone").value = String(wip.done);
+  $("definitionOfDone").value = state.currentBoard.definitionOfDone || "";
+  setOverlay($("settingsOverlay"), true, "wipTodo");
+}
+
+// Valida os três números e grava WIP e Definition of Done sem modificar outros campos do quadro.
+async function saveBoardSettings(event) {
+  event.preventDefault();
+  if (state.role !== "OWNER" || !state.currentBoard) {
+    state.notify("Você não tem permissão para fazer isso.");
+    return;
+  }
+  const values = {
+    todo: $("wipTodo").valueAsNumber,
+    doing: $("wipDoing").valueAsNumber,
+    done: $("wipDone").valueAsNumber
+  };
+  if (Object.values(values).some(value => !Number.isInteger(value) || value < 0)) {
+    state.notify("Os limites de WIP devem ser números inteiros iguais ou maiores que zero.");
+    return;
+  }
+  const button = event.submitter;
+  if (button) button.disabled = true;
+  try {
+    const definitionOfDone = $("definitionOfDone").value.trim();
+    await updateDoc(doc(state.db, "boards", state.currentBoard.id), {
+      wip: values,
+      definitionOfDone
+    });
+    state.currentBoard = { ...state.currentBoard, wip: values, definitionOfDone };
+    setOverlay($("settingsOverlay"), false);
+    renderTasks();
+    state.notify("Configurações do quadro salvas.");
+  } catch (error) {
+    state.notify(errorMessage(error, "salvar as configurações do quadro"));
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+// Recria as opções dos filtros usando labels e membros já sincronizados no quadro.
+function renderBoardFilters() {
+  const labelSelect = $("filterLabel");
+  const selectedLabel = state.filters.label;
+  const labels = [...new Set(state.tasks.flatMap(task => Array.isArray(task.labels) ? task.labels : []))]
+    .sort((left, right) => left.localeCompare(right, "pt-BR"));
+  labelSelect.replaceChildren();
+  const allLabels = document.createElement("option");
+  allLabels.value = "";
+  allLabels.textContent = "Todas";
+  labelSelect.appendChild(allLabels);
+  labels.forEach(label => {
+    const option = document.createElement("option");
+    option.value = label;
+    option.textContent = label;
+    labelSelect.appendChild(option);
+  });
+  labelSelect.value = labels.includes(selectedLabel) ? selectedLabel : "";
+  state.filters.label = labelSelect.value;
+
+  const assigneeSelect = $("filterAssignee");
+  const selectedAssignee = state.filters.assignee;
+  assigneeSelect.replaceChildren();
+  const allAssignees = document.createElement("option");
+  allAssignees.value = "";
+  allAssignees.textContent = "Todos";
+  assigneeSelect.appendChild(allAssignees);
+  const memberOptions = state.members.filter(member => member.uid);
+  memberOptions.forEach(member => {
+    const option = document.createElement("option");
+    option.value = member.uid;
+    option.textContent = member.name || member.email || "Membro";
+    assigneeSelect.appendChild(option);
+  });
+  const unassigned = document.createElement("option");
+  unassigned.value = "__unassigned";
+  unassigned.textContent = "Sem responsável";
+  assigneeSelect.appendChild(unassigned);
+  assigneeSelect.value = memberOptions.some(member => member.uid === selectedAssignee)
+    || selectedAssignee === "__unassigned" ? selectedAssignee : "";
+  state.filters.assignee = assigneeSelect.value;
+}
+
+// Restaura os filtros ao estado inicial quando o quadro muda ou quando a pessoa pede para limpar.
+function resetBoardFilters() {
+  if (!$("filterPriority")) return;
+  $("filterPriority").value = "";
+  $("filterLabel").value = "";
+  $("filterAssignee").value = "";
+  state.filters = { priority: "", label: "", assignee: "" };
+}
+
+// Remove filtros ativos e redesenha os cartões sem alterar seu estado salvo.
+function clearBoardFilters() {
+  resetBoardFilters();
+  renderTasks();
+}
+
+// Confere a capacidade da coluna antes de qualquer movimentação feita pelo Kanban.
+function isWipFull(status, movingTaskId) {
+  const limit = boardWip()[status];
+  if (!limit) return false;
+  const count = state.tasks.filter(task => task.status === status && task.id !== movingTaskId).length;
+  return count >= limit;
 }
 
 // Observa as tarefas aninhadas no quadro atual para atualizar cartões em tempo real.
@@ -297,6 +449,7 @@ function listenToTasks(boardId) {
     query(collection(state.db, "boards", boardId, "tasks"), orderBy("createdAt", "asc")),
     snapshot => {
       state.tasks = snapshot.docs.map(taskDocument => ({ id: taskDocument.id, ...taskDocument.data() }));
+      renderBoardFilters();
       renderTasks();
     },
     error => state.notify(errorMessage(error, "carregar as tarefas"))
@@ -307,8 +460,10 @@ function listenToTasks(boardId) {
 function renderTasks() {
   const board = $("board");
   board.replaceChildren();
+  const limits = boardWip();
   COLUMNS.forEach(column => {
-    const items = state.tasks.filter(task => task.status === column.id);
+    const columnTasks = state.tasks.filter(task => task.status === column.id);
+    const items = columnTasks.filter(matchesBoardFilters);
     const section = document.createElement("section");
     section.className = "column";
     const heading = document.createElement("div");
@@ -320,14 +475,21 @@ function renderTasks() {
     title.textContent = column.title;
     const count = document.createElement("span");
     count.className = "count";
-    count.textContent = String(items.length);
+    const limit = limits[column.id];
+    count.textContent = limit ? `${columnTasks.length}/${limit}` : String(columnTasks.length);
+    count.setAttribute("aria-label", limit
+      ? `${columnTasks.length} tarefas de limite ${limit}`
+      : `${columnTasks.length} tarefas`);
+    if (limit && columnTasks.length >= limit) count.classList.add("wip-reached");
     heading.append(dot, title, count);
     const list = document.createElement("div");
     list.className = "cards";
     if (!items.length) {
       const empty = document.createElement("div");
       empty.className = "empty";
-      empty.textContent = state.role === "VIEWER"
+      empty.textContent = state.filters.priority || state.filters.label || state.filters.assignee
+        ? "Nenhuma tarefa corresponde aos filtros."
+        : state.role === "VIEWER"
         ? "Nenhuma tarefa nesta coluna."
         : "Nenhuma tarefa aqui. Arraste um card até esta coluna.";
       list.appendChild(empty);
@@ -337,14 +499,18 @@ function renderTasks() {
     if (state.role !== "VIEWER") {
       section.addEventListener("dragover", event => {
         event.preventDefault();
+        if (isWipFull(column.id, state.draggedId)) {
+          section.classList.add("wip-blocked");
+          return;
+        }
         section.classList.add("drag-over");
       });
-      section.addEventListener("dragleave", event => {
-        if (!section.contains(event.relatedTarget)) section.classList.remove("drag-over");
+      section.addEventListener("dragleave", () => {
+        section.classList.remove("drag-over", "wip-blocked");
       });
       section.addEventListener("drop", event => {
         event.preventDefault();
-        section.classList.remove("drag-over");
+        section.classList.remove("drag-over", "wip-blocked");
         const task = state.tasks.find(item => item.id === state.draggedId);
         if (task && task.status !== column.id) moveTask(task.id, column.id);
       });
@@ -353,78 +519,175 @@ function renderTasks() {
   });
 }
 
-// Monta um cartão sem interpretar títulos e descrições como marcação HTML.
+// Combina os filtros ativos para exibir cartões sem interferir na contagem real de WIP.
+function matchesBoardFilters(task) {
+  const priority = task.priority || "medium";
+  if (state.filters.priority && priority !== state.filters.priority) return false;
+  if (state.filters.label && !(Array.isArray(task.labels) && task.labels.includes(state.filters.label))) return false;
+  if (state.filters.assignee === "__unassigned" && task.assigneeId) return false;
+  if (state.filters.assignee && state.filters.assignee !== "__unassigned"
+    && task.assigneeId !== state.filters.assignee) return false;
+  return true;
+}
+
+// Monta um cartão compacto sem interpretar títulos, descrições ou labels como HTML.
 function createTaskCard(task) {
   const card = document.createElement("article");
   card.className = "card";
   card.draggable = state.role !== "VIEWER";
-  const title = document.createElement("h3");
-  title.textContent = task.title || "";
-  card.appendChild(title);
+
+  // Mantém ações compactas no topo do cartão e textos acessíveis nos controles de ícone.
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
   const taskUrl = new URL("task.html", window.location.href);
   taskUrl.searchParams.set("board", state.currentBoard.id);
   taskUrl.searchParams.set("id", task.id);
   const openLink = document.createElement("a");
-  openLink.className = "open-task-link";
+  openLink.className = "card-icon-action";
   openLink.href = taskUrl.href;
   openLink.target = "_blank";
   openLink.rel = "noopener";
-  openLink.textContent = "Abrir ↗";
+  openLink.textContent = "↗";
+  openLink.title = "Abrir tarefa em nova aba";
   openLink.setAttribute("aria-label", `Abrir tarefa ${task.title || ""} em nova aba`);
-  card.appendChild(openLink);
+  actions.appendChild(openLink);
+  if (state.role !== "VIEWER") {
+    const edit = document.createElement("button");
+    edit.className = "card-icon-action";
+    edit.type = "button";
+    edit.textContent = "✎";
+    edit.title = "Editar tarefa";
+    edit.setAttribute("aria-label", `Editar título e descrição da tarefa ${task.title || ""}`);
+    edit.addEventListener("click", () => openTaskModal(task));
+    actions.appendChild(edit);
+
+    const remove = document.createElement("button");
+    remove.className = "card-icon-action card-delete-action";
+    remove.type = "button";
+    remove.textContent = "×";
+    remove.title = "Excluir tarefa";
+    remove.setAttribute("aria-label", `Excluir tarefa ${task.title || ""}`);
+    remove.addEventListener("click", () => removeTask(task.id));
+    actions.appendChild(remove);
+  }
+  card.appendChild(actions);
+
+  // Exibe até três labels na capa e resume as restantes para manter o cartão compacto.
+  if (Array.isArray(task.labels) && task.labels.length) {
+    const labels = document.createElement("div");
+    labels.className = "card-labels";
+    task.labels.slice(0, 3).forEach(label => {
+      const chip = document.createElement("span");
+      chip.className = `task-chip ${labelColorClass(label)}`;
+      chip.textContent = label;
+      labels.appendChild(chip);
+    });
+    if (task.labels.length > 3) {
+      const extra = document.createElement("span");
+      extra.className = "task-chip label-overflow";
+      extra.textContent = `+${task.labels.length - 3}`;
+      extra.setAttribute("aria-label", `${task.labels.length - 3} labels adicionais`);
+      labels.appendChild(extra);
+    }
+    card.appendChild(labels);
+  }
+
+  // Limita títulos extensos a duas linhas sem alterar o texto salvo no Firestore.
+  const title = document.createElement("h3");
+  title.textContent = task.title || "";
+  card.appendChild(title);
   if (task.desc) {
     const description = document.createElement("p");
     description.textContent = task.desc;
     card.appendChild(description);
   }
 
-  // Apresenta metadados mantidos pela página própria da tarefa também no quadro em tempo real.
-  const metadata = document.createElement("div");
-  metadata.className = "task-metadata";
-  const assignee = document.createElement("span");
-  assignee.className = "task-assignee";
-  assignee.textContent = task.assigneeName || "Sem responsável";
-  metadata.appendChild(assignee);
+  // Resume prioridade e prazo em uma linha, destacando prazo vencido apenas em tarefas abertas.
+  const info = document.createElement("div");
+  info.className = "card-info";
   const priorityNames = { low: "Baixa", medium: "Média", high: "Alta" };
   const priority = task.priority || "medium";
-  const priorityBadge = document.createElement("span");
-  priorityBadge.className = "priority-badge";
-  priorityBadge.dataset.priority = priority;
-  priorityBadge.textContent = priorityNames[priority] || "Média";
-  metadata.appendChild(priorityBadge);
+  card.dataset.priority = priority;
+  const priorityLabel = document.createElement("span");
+  priorityLabel.className = "card-priority";
+  priorityLabel.dataset.priority = priority;
+  const priorityDot = document.createElement("span");
+  priorityDot.className = "priority-dot";
+  priorityDot.setAttribute("aria-hidden", "true");
+  const priorityText = document.createElement("span");
+  priorityText.textContent = priorityNames[priority] || "Média";
+  priorityLabel.append(priorityDot, priorityText);
+  info.appendChild(priorityLabel);
+  const storyPoints = [1, 2, 3, 5, 8, 13].includes(Number(task.storyPoints))
+    ? Number(task.storyPoints) : 1;
+  const points = document.createElement("span");
+  points.className = "story-points-chip";
+  points.textContent = `${storyPoints} pts`;
+  points.setAttribute("aria-label", `${storyPoints} story points`);
+  info.appendChild(points);
+
   const due = document.createElement("span");
   due.className = "task-due";
   if (task.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)) {
     const [year, month, day] = task.dueDate.split("-");
-    due.textContent = `Prazo: ${day}/${month}/${year}`;
+    due.classList.add("has-due-date");
+    due.setAttribute("aria-label", `Prazo: ${day}/${month}/${year}`);
+    const calendar = document.createElement("span");
+    calendar.textContent = "▦";
+    calendar.setAttribute("aria-hidden", "true");
+    const dateText = document.createElement("span");
+    dateText.textContent = `${day}/${month}`;
+    due.append(calendar, dateText);
     const now = new Date();
     const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-    if (task.dueDate < today) due.classList.add("overdue");
+    if (task.dueDate < today && task.status !== "done") due.classList.add("overdue");
   } else {
+    due.classList.add("no-due-date");
     due.textContent = "Sem prazo";
   }
-  metadata.appendChild(due);
-  if (Array.isArray(task.labels) && task.labels.length) {
-    const labels = document.createElement("div");
-    labels.className = "card-labels";
-    task.labels.forEach(label => {
-      const chip = document.createElement("span");
-      chip.className = "task-chip";
-      chip.textContent = label;
-      labels.appendChild(chip);
-    });
-    metadata.appendChild(labels);
+  info.appendChild(due);
+  card.appendChild(info);
+
+  // Agrupa responsável e progresso no rodapé, usando avatar de cor estável para cada nome.
+  const footer = document.createElement("div");
+  footer.className = "card-footer";
+  const assignee = document.createElement("div");
+  assignee.className = "card-assignee";
+  if (task.assigneeName) {
+    const avatar = document.createElement("span");
+    avatar.className = "assignee-avatar";
+    avatar.textContent = assigneeInitials(task.assigneeName);
+    avatar.style.setProperty("--avatar-color", assigneeColor(task.assigneeName));
+    avatar.setAttribute("aria-hidden", "true");
+    const name = document.createElement("span");
+    name.className = "assignee-name";
+    name.textContent = firstName(task.assigneeName);
+    name.title = task.assigneeName;
+    assignee.append(avatar, name);
+  } else {
+    assignee.classList.add("unassigned");
+    assignee.textContent = "Sem responsável";
   }
+  footer.appendChild(assignee);
   if (Array.isArray(task.checklist) && task.checklist.length) {
     const completed = task.checklist.filter(item => item.done).length;
-    const progress = document.createElement("span");
-    progress.className = "card-checklist-progress";
-    progress.textContent = `Checklist ${completed}/${task.checklist.length}`;
-    metadata.appendChild(progress);
+    const progress = document.createElement("div");
+    progress.className = "card-checklist";
+    const bar = document.createElement("span");
+    bar.className = "card-checklist-bar";
+    const fill = document.createElement("span");
+    fill.className = "card-checklist-fill";
+    fill.style.width = `${Math.round((completed / task.checklist.length) * 100)}%`;
+    bar.appendChild(fill);
+    const progressText = document.createElement("span");
+    progressText.textContent = `${completed}/${task.checklist.length}`;
+    progress.append(bar, progressText);
+    progress.setAttribute("aria-label", `Checklist: ${completed} de ${task.checklist.length} itens concluídos`);
+    footer.appendChild(progress);
   }
-  card.appendChild(metadata);
+  card.appendChild(footer);
 
-  // Mantém o seletor móvel de status para papéis que podem editar tarefas.
+  // Mantém o seletor de mudança de coluna no rodapé, inclusive em telas pequenas.
   if (state.role !== "VIEWER") {
     const selector = document.createElement("select");
     selector.className = "move";
@@ -438,24 +701,6 @@ function createTaskCard(task) {
     });
     selector.addEventListener("change", () => moveTask(task.id, selector.value));
     card.appendChild(selector);
-
-    // Exibe ações de edição e exclusão apenas para membros com permissão de escrita.
-    const edit = document.createElement("button");
-    edit.className = "edit-task";
-    edit.type = "button";
-    edit.textContent = "✎";
-    edit.setAttribute("aria-label", `Editar título e descrição da tarefa ${task.title || ""}`);
-    edit.addEventListener("click", () => openTaskModal(task));
-    card.appendChild(edit);
-
-    const remove = document.createElement("button");
-    remove.className = "delete";
-    remove.type = "button";
-    remove.textContent = "×";
-    remove.setAttribute("aria-label", `Excluir tarefa ${task.title || ""}`);
-    remove.addEventListener("click", () => removeTask(task.id));
-    card.appendChild(remove);
-
     card.addEventListener("dragstart", event => {
       state.draggedId = task.id;
       event.dataTransfer.effectAllowed = "move";
@@ -467,10 +712,45 @@ function createTaskCard(task) {
   return card;
 }
 
+// Converte rótulos conhecidos em classes visuais sem reutilizar texto de usuário como CSS.
+function labelColorClass(label) {
+  const normalized = String(label).trim().toLocaleLowerCase("pt-BR");
+  if (normalized === "bug") return "label-bug";
+  if (normalized === "feature") return "label-feature";
+  if (normalized === "urgente") return "label-urgent";
+  return "label-neutral";
+}
+
+// Exibe somente o primeiro nome no rodapé para reduzir a largura ocupada pelo responsável.
+function firstName(name) {
+  return String(name).trim().split(/\s+/)[0] || "";
+}
+
+// Deriva até duas iniciais do nome para identificação visual sem dependência de imagens.
+function assigneeInitials(name) {
+  return String(name).trim().split(/\s+/).filter(Boolean).slice(0, 2)
+    .map(part => part.charAt(0).toLocaleUpperCase("pt-BR")).join("");
+}
+
+// Deriva uma cor estável para cada nome sem persistir campos adicionais no Firestore.
+function assigneeColor(name) {
+  let hash = 0;
+  for (const character of String(name).toLocaleLowerCase("pt-BR")) {
+    hash = (hash * 31 + character.codePointAt(0)) >>> 0;
+  }
+  return `hsl(${hash % 360} 48% 42%)`;
+}
+
 // Atualiza o status da tarefa e informa explicitamente falhas de autorização.
 async function moveTask(taskId, status) {
   if (state.role === "VIEWER" || !state.currentBoard) {
     state.notify("Você não tem permissão para fazer isso.");
+    return;
+  }
+  const task = state.tasks.find(item => item.id === taskId);
+  if (task && task.status !== status && isWipFull(status, taskId)) {
+    state.notify("Limite de WIP da coluna atingido.");
+    renderTasks();
     return;
   }
   const column = COLUMNS.find(item => item.id === status);
@@ -527,6 +807,10 @@ async function saveTask(event) {
   if (!title) return;
   const description = $("desc").value.trim();
   const taskCollection = collection(state.db, "boards", state.currentBoard.id, "tasks");
+  if (!state.editingTaskId && isWipFull("todo", null)) {
+    state.notify("Limite de WIP da coluna atingido.");
+    return;
+  }
   try {
     if (state.editingTaskId) {
       await updateDoc(doc(taskCollection, state.editingTaskId), { title, desc: description });
@@ -536,6 +820,7 @@ async function saveTask(event) {
         title,
         desc: description,
         status: "todo",
+        storyPoints: 1,
         createdAt: Date.now()
       });
       state.notify("Tarefa adicionada.");
@@ -559,7 +844,11 @@ function listenToMembers(boardId) {
   if (state.membersUnsubscribe) state.membersUnsubscribe();
   state.membersUnsubscribe = onSnapshot(
     collection(state.db, "boards", boardId, "members"),
-    snapshot => renderMembers(snapshot.docs.map(member => ({ uid: member.id, ...member.data() }))),
+    snapshot => {
+      state.members = snapshot.docs.map(member => ({ uid: member.id, ...member.data() }));
+      renderBoardFilters();
+      renderMembers(state.members);
+    },
     error => state.notify(errorMessage(error, "carregar os membros"))
   );
 }
@@ -579,7 +868,7 @@ function renderMembers(members) {
     detail.textContent = `${member.email || ""} · ${roleName(member.role)}`;
     identity.append(name, detail);
     row.appendChild(identity);
-    if (member.role !== "OWNER") {
+    if (state.role === "OWNER" && member.role !== "OWNER") {
       const remove = document.createElement("button");
       remove.type = "button";
       remove.className = "btn-ghost remove-member";

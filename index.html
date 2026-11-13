@@ -120,10 +120,30 @@
         <span class="user" id="kanbanUserName"></span>
         <span class="readonly-badge" id="readonlyBadge" hidden>Somente leitura</span>
         <button class="btn-ghost" id="shareBoard" type="button" hidden>Compartilhar</button>
+        <button class="btn-ghost" id="openBoardSettings" type="button" hidden aria-label="Configurações do quadro">⚙ Configurações</button>
         <button class="btn-primary" id="openModal" type="button">+ Adicionar nova tarefa</button>
         <button class="btn-ghost" id="logoutBoard" type="button">Sair</button>
       </div>
     </header>
+    <!-- Filtros locais ajudam a encontrar cartões sem alterar a consulta em tempo real. -->
+    <section class="board-filters" aria-label="Filtros de tarefas">
+      <label for="filterPriority">Prioridade</label>
+      <select id="filterPriority">
+        <option value="">Todas</option>
+        <option value="high">Alta</option>
+        <option value="medium">Média</option>
+        <option value="low">Baixa</option>
+      </select>
+      <label for="filterLabel">Label</label>
+      <select id="filterLabel">
+        <option value="">Todas</option>
+      </select>
+      <label for="filterAssignee">Responsável</label>
+      <select id="filterAssignee">
+        <option value="">Todos</option>
+      </select>
+      <button class="btn-ghost" id="clearBoardFilters" type="button">Limpar filtros</button>
+    </section>
     <main class="board" id="board" aria-label="Colunas de tarefas"></main>
   </section>
 </div>
@@ -138,6 +158,31 @@
       <div class="actions">
         <button type="button" class="btn-ghost" id="cancelBoard">Cancelar</button>
         <button type="submit" class="btn-primary">Criar quadro</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Configurações do quadro são exclusivas do proprietário e persistem WIP e Definition of Done. -->
+<div class="overlay" id="settingsOverlay" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle" aria-hidden="true">
+  <div class="modal settings-modal">
+    <h2 id="settingsModalTitle">Configurações do quadro</h2>
+    <form id="settingsForm">
+      <fieldset class="wip-settings">
+        <legend>Limite de WIP por coluna</legend>
+        <p class="settings-help">Use 0 para não limitar a quantidade de tarefas.</p>
+        <label for="wipTodo">A Fazer</label>
+        <input id="wipTodo" type="number" min="0" step="1" value="0" required>
+        <label for="wipDoing">Em Andamento</label>
+        <input id="wipDoing" type="number" min="0" step="1" value="3" required>
+        <label for="wipDone">Concluído</label>
+        <input id="wipDone" type="number" min="0" step="1" value="0" required>
+      </fieldset>
+      <label for="definitionOfDone">Definition of Done</label>
+      <textarea id="definitionOfDone" maxlength="2000" rows="4" placeholder="Descreva quando uma tarefa está concluída"></textarea>
+      <div class="actions">
+        <button type="button" class="btn-ghost" id="cancelSettings">Cancelar</button>
+        <button type="submit" class="btn-primary">Salvar configurações</button>
       </div>
     </form>
   </div>

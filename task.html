@@ -64,7 +64,33 @@
               <option value="high">Alta</option>
             </select>
           </div>
+          <div>
+            <label for="taskStoryPoints">Story points</label>
+            <select id="taskStoryPoints">
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="5">5</option>
+              <option value="8">8</option>
+              <option value="13">13</option>
+            </select>
+          </div>
         </div>
+
+        <!-- Critérios e Definition of Done são exibidos junto ao restante dos dados Scrum da tarefa. -->
+        <section class="task-section" aria-labelledby="acceptanceCriteriaHeading">
+          <h2 id="acceptanceCriteriaHeading">Critérios de aceite</h2>
+          <label class="visually-hidden" for="taskAcceptanceCriteria">Critérios de aceite</label>
+          <textarea id="taskAcceptanceCriteria" maxlength="4000" rows="4" placeholder="Descreva como validar esta tarefa"></textarea>
+        </section>
+        <section class="task-section dod-section" aria-labelledby="definitionOfDoneHeading">
+          <h2 id="definitionOfDoneHeading">Definition of Done</h2>
+          <p class="definition-of-done-text" id="definitionOfDoneText"></p>
+          <label class="dod-checkbox" for="taskDodMet">
+            <input id="taskDodMet" type="checkbox">
+            <span>Definition of Done cumprida</span>
+          </label>
+        </section>
 
         <!-- Labels são apresentados como chips de texto, sem interpretar conteúdo como HTML. -->
         <section class="task-section" aria-labelledby="labelsHeading">
@@ -72,14 +98,10 @@
           <div class="chip-list" id="taskLabels" aria-live="polite"></div>
           <div class="inline-entry" id="labelEntry">
             <label class="visually-hidden" for="newLabel">Nova label</label>
-            <input id="newLabel" maxlength="30" list="labelSuggestions" placeholder="Adicionar label">
-            <datalist id="labelSuggestions">
-              <option value="bug"></option>
-              <option value="feature"></option>
-              <option value="urgente"></option>
-            </datalist>
+            <input id="newLabel" maxlength="30" placeholder="Adicionar label">
             <button class="btn-ghost" id="addLabel" type="button">Adicionar</button>
           </div>
+          <div class="label-suggestions" id="labelSuggestions" aria-label="Sugestões de labels"></div>
         </section>
 
         <!-- Checklist editável atualiza a indicação de progresso enquanto os dados são ajustados. -->
